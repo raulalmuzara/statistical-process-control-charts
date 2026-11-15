@@ -1,0 +1,215 @@
+---
+title: "$\\overline{x}$ and $r$ chart for statistical process control"
+author: "Raul Almuzara"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+&nbsp;
+
+### **Introduction**
+
+We will work with a dataset which simulates the data that could have been collected from one variable of an industrial process with an unknown reference mean and deviation. Data are collected in small batches (rational subgroups). We will obtain an $\overline{x}$ and $r$ control chart using the appropriate statistical techniques. Then, we will judge if the industrial process is under control or if there could be a problem.
+
+&nbsp;
+
+Tables of constants for control charts for each subgroup size can be found at:
+
+https://web.mit.edu/2.810/www/files/readings/ControlChartConstantsAndFormulae.pdf
+
+https://r-bar.net/control-chart-constants-tables-explanations/
+
+For the particular chart that we will obtain here, the fundamental constants are $d_2(n)$ and $d_3(n)$, where $n$ is the number of values in a rational subgroup. However, we will actually only need the correction constants $A_2(n)$, $D_3(n)$ and $D_4(n)$ that can be obtained from them. These values are typically tabulated.
+
+```{r}
+A2 <- function(n)
+{
+  # constants A2 for subgroup sizes up to n=30
+  
+  if(n%%1==0 && n>=1 && n<=30)
+  {
+    vector_A2 <- c(NA, 1.8800, 1.0233, 0.7286, 0.5768, 0.4832, 0.4193, 0.3725, 0.3367, 0.3083, 0.2851, 0.2658, 0.2494, 0.2354, 0.2231, 0.2123, 0.2028, 0.1943, 0.1866, 0.1796, 0.1733, 0.1675, 0.1621, 0.1572, 0.1526, 0.1484, 0.1445, 0.1408, 0.1373, 0.1341)
+    
+    return(vector_A2[n])
+  }
+  
+  else
+  {
+    return(NA)
+  }
+}
+```
+
+```{r}
+D3 <- function(n)
+{
+  # constants D3 for subgroup sizes up to n=30
+  
+  if(n%%1==0 && n>=1 && n<=30)
+  {
+    vector_D3 <- c(NA, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0757, 0.1362, 0.1840, 0.2230, 0.2556, 0.2833, 0.3072, 0.3281, 0.3466, 0.3630, 0.3779, 0.3913, 0.4035, 0.4147, 0.4250, 0.4345, 0.4434, 0.4516, 0.4593, 0.4665, 0.4733, 0.4797, 0.4857, 0.4914)
+    
+    return(vector_D3[n])
+  }
+  
+  else
+  {
+    return(NA)
+  }
+}
+```
+
+```{r}
+D4 <- function(n)
+{
+  # constants D4 for subgroup sizes up to n=30
+  
+  if(n%%1==0 && n>=1 && n<=30)
+  {
+    vector_D4 <- c(NA, 3.2665, 2.5746, 2.2821, 2.1145, 2.0038, 1.9243, 1.8638, 1.8160, 1.7770, 1.7444, 1.7167, 1.6928, 1.6719, 1.6534, 1.6370, 1.6221, 1.6087, 1.5965, 1.5853, 1.5750, 1.5655, 1.5566, 1.5484, 1.5407, 1.5335, 1.5267, 1.5203, 1.5143, 1.5086)
+    
+    return(vector_D4[n])
+  }
+  
+  else
+  {
+    return(NA)
+  }
+}
+```
+
+&nbsp;
+
+### **Analysis**
+
+We will use the file *datacc2.txt*.
+
+```{r}
+data2 <- read.delim('datacc2.txt', header = FALSE, sep = ' ', dec = '.')[,c(1,4)]
+colnames(data2) <- c('Subgroup','Value')
+data2
+```
+
+Here is a histogram with all measurements.
+
+```{r}
+hist(data2$Value, main = 'Histogram', xlab = 'Value', ylab = 'Frequency')
+```
+
+We test for normality and we find that the null hypothesis of normal data cannot be rejected.
+
+```{r}
+shapiro.test(data2$Value)
+```
+
+Number of samples in each rational subgroup.
+
+```{r}
+table(data2$Subgroup)
+```
+
+That is $k=20$ rational subgroups with $n=4$ samples each.
+
+```{r}
+k <- 20
+n <- 4
+```
+
+Let's compute the mean of each rational subgroup.
+
+```{r}
+means <- aggregate(data2$Value, list(data2$Subgroup), FUN=mean)[,2]
+```
+
+Let's compute the range of each rational subgroup.
+
+```{r}
+ranges <- aggregate(data2$Value, list(data2$Subgroup), FUN=max)[,2] - aggregate(data2$Value, list(data2$Subgroup), FUN=min)[,2]
+```
+
+We need to compute $\overline{\overline{x}}$, which is the mean of all the means computed inside every rational subgroup.
+
+```{r}
+xbarbar <- mean(means)
+xbarbar
+```
+
+Now, we compute $\overline{r}$, which is the mean of all the ranges computed inside every rational subgroup.
+
+```{r}
+rbar <- mean(ranges)
+rbar
+```
+
+The points that will be plotted on the $\overline{x}$ chart are the means of all rational subgroups.
+
+```{r}
+names(means) <- paste('Subgroup', 1:k)
+print(means)
+```
+
+The relevant lines of the $\overline{x}$ chart are:
+
+-- The center line (blue):
+
+$$CL = \overline{\overline{x}} \\\approx 20.0450$$
+
+-- The lower control limit (red):
+
+$$LCL = \overline{\overline{x}} - A_2(n)\cdot\overline{r} \\\approx 20.0450 - 0.7286\cdot 2.3194 \\\approx 18.3551$$
+
+-- The upper control limit (red):
+
+$$UCL = \overline{\overline{x}} + A_2(n)\cdot\overline{r} \\\approx 20.0450 + 0.7286\cdot 2.3194 \\\approx 21.7349$$
+
+With all the information above, we plot the $\overline{x}$ chart.
+
+```{r}
+plot(1:k, means, type='o', main = 'xbar chart', xlab = 'Rational subgroup', ylab = 'Mean', ylim = c(0.9*xbarbar, 1.1*xbarbar))
+abline(h=xbarbar, col='blue')
+abline(h=xbarbar-A2(n)*rbar, col='red')
+abline(h=xbarbar+A2(n)*rbar, col='red')
+```
+
+&nbsp;
+
+The points that will be plotted on the $r$ chart are the ranges of all rational subgroups.
+
+```{r}
+names(ranges) <- paste('Subgroup', 1:k)
+print(ranges)
+```
+
+The relevant lines of the $r$ chart are:
+
+-- The center line (blue):
+
+$$CL = \overline{r} \\\approx 2.3194$$
+
+-- The lower control limit (red):
+
+$$LCL = D_3(n)\cdot\overline{r} \\\approx 0.0000\cdot 2.3194 \\\approx 0.0000$$
+
+-- The upper control limit (red):
+
+$$UCL = D_4(n)\cdot\overline{r} \\\approx 2.2821\cdot 2.3194 \\\approx 5.2931$$
+
+With all the information above, we plot the $r$ chart.
+
+```{r}
+plot(1:k, ranges, type='o', main = 'r chart', xlab = 'Rational subgroup', ylab = 'Range', ylim=c(0, 3*rbar))
+abline(h=rbar, col='blue')
+abline(h=D3(n)*rbar, col='red')
+abline(h=D4(n)*rbar, col='red')
+```
+
+&nbsp;
+
+### **Conclusion**
+
+For both parts of the $\overline{x}$ and $r$ chart, all the points are below the upper control limit and above the lower control limit, so the process seems to be under control.

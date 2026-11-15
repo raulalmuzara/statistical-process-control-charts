@@ -1,0 +1,215 @@
+---
+title: "$\\overline{x}$ and $s$ chart for statistical process control"
+author: "Raul Almuzara"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+&nbsp;
+
+### **Introduction**
+
+We will work with a dataset which simulates the data that could have been collected from one variable of an industrial process with an unknown reference mean and deviation. Data are collected in small batches (rational subgroups). We will obtain an $\overline{x}$ and $s$ control chart using the appropriate statistical techniques. Then, we will judge if the industrial process is under control or if there could be a problem.
+
+&nbsp;
+
+Tables of constants for control charts for each subgroup size can be found at:
+
+https://web.mit.edu/2.810/www/files/readings/ControlChartConstantsAndFormulae.pdf
+
+https://r-bar.net/control-chart-constants-tables-explanations/
+
+For the particular chart that we will obtain here, the fundamental constant is $c_4(n)$, where $n$ is the number of values in a rational subgroup. However, we will actually only need the correction constants $A_3(n)$, $B_3(n)$ and $B_4(n)$ that can be obtained from it. These values are typically tabulated.
+
+```{r}
+A3 <- function(n)
+{
+  # constants A3 for subgroup sizes up to n=30
+  
+  if(n%%1==0 && n>=1 && n<=30)
+  {
+    vector_A3 <- c(NA, 2.6587, 1.9544, 1.6281, 1.4273, 1.2871, 1.1819, 1.0991, 1.0317, 0.9754, 0.9274, 0.8859, 0.8495, 0.8173, 0.7885, 0.7626, 0.7391, 0.7176, 0.6979, 0.6797, 0.6629, 0.6473, 0.6327, 0.6191, 0.6063, 0.5943, 0.5829, 0.5722, 0.5621, 0.5525)
+    
+    return(vector_A3[n])
+  }
+  
+  else
+  {
+    return(NA)
+  }
+}
+```
+
+```{r}
+B3 <- function(n)
+{
+  # constants B3 for subgroup sizes up to n=30
+  
+  if(n%%1==0 && n>=1 && n<=30)
+  {
+    vector_B3 <- c(NA, 0.0000, 0.0000, 0.0000, 0.0000, 0.0304, 0.1177, 0.1851, 0.2391, 0.2837, 0.3213, 0.3535, 0.3816, 0.4062, 0.4282, 0.4479, 0.4657, 0.4818, 0.4966, 0.5102, 0.5228, 0.5344, 0.5452, 0.5553, 0.5648, 0.5737, 0.5820, 0.5899, 0.5974, 0.6044)
+    
+    return(vector_B3[n])
+  }
+  
+  else
+  {
+    return(NA)
+  }
+}
+```
+
+```{r}
+B4 <- function(n)
+{
+  # constants B4 for subgroup sizes up to n=30
+  
+  if(n%%1==0 && n>=1 && n<=30)
+  {
+    vector_B4 <- c(NA, 3.2665, 2.5682, 2.2660, 2.0890, 1.9696, 1.8823, 1.8149, 1.7609, 1.7163, 1.6787, 1.6465, 1.6184, 1.5938, 1.5718, 1.5521, 1.5343, 1.5182, 1.5034, 1.4898, 1.4772, 1.4656, 1.4548, 1.4447, 1.4352, 1.4263, 1.4180, 1.4101, 1.4026, 1.3956)
+    
+    return(vector_B4[n])
+  }
+  
+  else
+  {
+    return(NA)
+  }
+}
+```
+
+&nbsp;
+
+### **Analysis**
+
+We will use the file *datacc1.txt*.
+
+```{r}
+data1 <- read.delim('datacc1.txt', header = FALSE, sep = ' ', dec = '.')[,c(1,4)]
+colnames(data1) <- c('Subgroup','Value')
+data1
+```
+
+Here is a histogram with all measurements.
+
+```{r}
+hist(data1$Value, main = 'Histogram', xlab = 'Value', ylab = 'Frequency')
+```
+
+We test for normality and we find that the null hypothesis of normal data cannot be rejected.
+
+```{r}
+shapiro.test(data1$Value)
+```
+
+We check the number of samples associated with each rational subgroup.
+
+```{r}
+table(data1$Subgroup)
+```
+
+We see that there are $k=30$ subgroups and each one has $n=5$ samples.
+
+```{r}
+k <- 30
+n <- 5
+```
+
+Let's compute the mean of each rational subgroup.
+
+```{r}
+means <- aggregate(data1$Value, list(data1$Subgroup), FUN=mean)[,2]
+```
+
+Let's compute the standard deviation of each rational subgroup.
+
+```{r}
+sds <- aggregate(data1$Value, list(data1$Subgroup), FUN=sd)[,2]
+```
+
+We need to compute $\overline{\overline{x}}$, which is the mean of all the means computed inside every rational subgroup.
+
+```{r}
+xbarbar <- mean(means)
+xbarbar
+```
+
+Now, we compute $\overline{s}$, which is the mean of all the standard deviations computed inside every rational subgroup.
+
+```{r}
+sbar <- mean(sds)
+sbar
+```
+
+The points that will be plotted on the $\overline{x}$ chart are the means of all rational subgroups.
+
+```{r}
+names(means) <- paste('Subgroup', 1:k)
+print(means)
+```
+
+The relevant lines of the $\overline{x}$ chart are:
+
+-- The center line (blue):
+
+$$CL = \overline{\overline{x}} \\\approx 9.9929$$
+
+-- The lower control limit (red):
+
+$$LCL = \overline{\overline{x}} - A_3(n)\cdot\overline{s} \\\approx 9.9929 - 1.4273\cdot 0.1069 \\\approx 9.8403$$
+
+-- The upper control limit (red):
+
+$$UCL = \overline{\overline{x}} + A_3(n)\cdot\overline{s} \\\approx 9.9929 + 1.4273\cdot 0.1069 \\\approx 10.1455$$
+
+With all the information above, we plot the $\overline{x}$ chart.
+
+```{r}
+plot(1:k, means, type='o', main = 'xbar chart', xlab = 'Rational subgroup', ylab = 'Mean', ylim = c(0.98*xbarbar, 1.02*xbarbar))
+abline(h=xbarbar, col="blue")
+abline(h=xbarbar-A3(n)*sbar, col="red")
+abline(h=xbarbar+A3(n)*sbar, col="red")
+```
+
+&nbsp;
+
+The points that will be plotted on the $s$ chart are the standard deviations of all rational subgroups.
+
+```{r}
+names(sds) <- paste('Subgroup', 1:k)
+print(sds)
+```
+
+The relevant lines of the $s$ chart are:
+
+-- The center line (blue):
+
+$$CL = \overline{s} \\\approx 0.1069$$
+
+-- The lower control limit (red):
+
+$$LCL = B_3(n)\cdot\overline{s} \\\approx 0.0000\cdot 0.1069 \\\approx 0.0000$$
+
+-- The upper control limit (red):
+
+$$UCL = B_4(n)\cdot\overline{s} \\\approx 2.0890\cdot 0.1069 \\\approx 0.2233$$
+
+With all the information above, we plot the $s$ chart.
+
+```{r}
+plot(1:k, sds, type='o', main = 's chart', xlab = 'Rational subgroup', ylab = 'Standard deviation', ylim = c(0, 3*sbar))
+abline(h=sbar, col='blue')
+abline(h=B3(n)*sbar, col='red')
+abline(h=B4(n)*sbar, col='red')
+```
+
+&nbsp;
+
+### **Conclusion**
+
+For the $\overline{x}$ chart, we see that all subgroup means are within the band created by the control lines, so we do not see any problem there. However, in the $s$ chart, we see that all points are good except the point in the rational subgroup 28. It has an abnormally high standard deviation which is above the upper control line. Thus, this suggests that the process is slightly out of control. Depending on the actual process being modeled, this may be either an unimportant anomaly or a more serious event if it is strictly necessary that absolutely everything is, with a very high probability, under control.

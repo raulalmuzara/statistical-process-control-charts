@@ -1,0 +1,230 @@
+---
+title: "MA and EWMA charts for statistical process control"
+author: "Raul Almuzara"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+&nbsp;
+
+### **Introduction**
+
+We will work with a dataset which simulates the data that could have been collected from one variable of an industrial process which, under control, should follow a normal distribution $N(50,1)$. We suspect the existence of a slow gradual malfunction. Data are collected in small batches (rational subgroups). We will obtain Moving Average (MA) and Exponentially Weighted Moving Average (EWMA) control charts using the appropriate statistical techniques. Then, we will judge if the industrial process is under control or if there could be a problem.
+
+&nbsp;
+
+### **Analysis**
+
+We will use the file *datacc4.txt*.
+
+```{r}
+data4 <- read.delim('datacc4.txt', header = FALSE, sep = ' ', dec = '.')[,c(1,4)]
+colnames(data4) <- c('Subgroup','Value')
+data4
+```
+
+Number of subgroups and samples in each one.
+
+```{r}
+table(data4$Subgroup)
+```
+
+There are $k=50$ rational subgroups and $n=10$ samples in each subgroup.
+
+```{r}
+k <- 50
+n <- 10
+```
+
+Here is a histogram with all measurements.
+
+```{r}
+hist(data4$Value, main = 'Histogram', xlab = 'Value', ylab = 'Frequency')
+```
+
+The normality test tells us that we cannot reject the null hypothesis of normal distribution.
+
+```{r}
+shapiro.test(data4$Value)
+```
+
+Assuming that the industrial process is well-known, if we suspect that there is a gradual shift in the process mean, it is typical to build charts using reference values rather than estimating parameters from current data. When parameters are estimated from a process that might already be off-target, the chart absorbs that bias, making it blind to subtle shifts. With the help of reliable historical baseline values, we will be able to flag gradual deviations from the ideal process target.
+
+```{r}
+mu0 <- 50
+sigma0 <- 1
+```
+
+We will also be using the mean of each rational subgroup.
+
+```{r}
+means <- aggregate(data4$Value, list(data4$Subgroup), FUN=mean)[,2]
+```
+
+In order to analyze possible shifts that indicate a malfunction, we may resort first to a standard Moving Average (MA) chart.
+
+For a MA chart, we must compute the moving averages after having chosen a window size $w$. In this case, we choose $w=10$.
+
+```{r}
+w <- 10
+```
+
+For each step (subgroup), we calculate the mean of the current value and up to the previous $w-1$ values, using an incomplete window when fewer values are available.
+
+```{r}
+moving_average <- function(values, window_size)
+{
+  values <- unlist(values, use.names = FALSE)
+  result <- numeric(length(values))
+
+  for (i in seq_along(values))
+  {
+    start <- max(1, i-window_size+1)
+    result[i] <- mean(values[start:i])
+  }
+
+  result
+}
+```
+
+We apply the previous function to the vector of means of subgroups to obtain the moving averages with $w=10$.
+
+```{r}
+mas <- moving_average(means, w)
+```
+
+The points that will appear in the MA control chart are those moving averages:
+
+```{r}
+names(mas) <- paste('Subgroup', 1:k)
+print(mas)
+```
+
+Let $i=1,\ldots,k$ (where $k=50$ subgroups in this case). The relevant lines of the MA chart are:
+
+-- The center line (blue). A flat line:
+
+$$CL = \mu_0 \\\approx 50$$
+
+-- The lower control limit (red). Each point associated with each subgroup $i$ will have a different value for the lower control line:
+
+$$LCL(i) = \mu_0 - 3\frac{\sigma_0}{\sqrt{n\cdot\min(i,w)}} \\\approx 50-3\frac{1}{\sqrt{10\cdot\min(i,10)}}$$
+
+-- The upper control limit (red). Each point associated with each subgroup $i$ will have a different value for the upper control line:
+
+$$UCL(i) = \mu_0 + 3\frac{\sigma_0}{\sqrt{n\cdot\min(i,w)}} \\\approx 50+3\frac{1}{\sqrt{10\cdot\min(i,10)}}$$
+
+The lower control limits of the MA chart for each rational subgroup are the following:
+
+```{r}
+i <- 1:k
+lcl_ma <- mu0 - 3 * sigma0 / sqrt(n*pmin(i, w))
+names(lcl_ma) <- paste('Subgroup', 1:k)
+print(lcl_ma)
+```
+
+The upper control limits of the MA chart for each rational subgroup are the following:
+
+```{r}
+i <- 1:k
+ucl_ma <- mu0 + 3 * sigma0 / sqrt(n*pmin(i, w))
+names(ucl_ma) <- paste('Subgroup', 1:k)
+print(ucl_ma)
+```
+
+With all the information above, we plot the MA chart.
+
+```{r}
+plot(i, mas, type='o', main=paste0('MA chart (w = ', w, ')'), xlab='Rational subgroup', ylab='Moving average', ylim=range(c(mas, lcl_ma, ucl_ma)))
+abline(h=mu0, col='blue')
+segments(x0=i-0.5, y0=lcl_ma, x1=i+0.5, y1=lcl_ma, col='red')
+segments(x0=i[-k]+0.5, y0=lcl_ma[-k], x1=i[-k]+0.5, y1=lcl_ma[-1], col='red')
+segments(x0=i-0.5, y0=ucl_ma, x1=i+0.5, y1=ucl_ma, col='red')
+segments(x0=i[-k]+0.5, y0=ucl_ma[-k], x1=i[-k]+0.5, y1=ucl_ma[-1], col='red')
+```
+
+&nbsp;
+
+Another popular type of chart that is useful for analyzing gradual shifts is the Exponentially Weighted Moving Average (EWMA) chart.
+
+For the EWMA chart, we must specify a smoothing parameter (or weighting factor) $\lambda$. In this case, we will choose $\lambda=0.15$, which is relatively small and will work well for detecting small gradual changes.
+
+```{r}
+lambda <- 0.15
+```
+
+We obtain the points of the EWMA chart with the following recursion:
+
+$$z_i = \lambda\overline{x}_i + (1-\lambda)z_{i-1},\quad z_0=\mu_0,\quad i=1,\ldots, k$$
+
+```{r}
+z <- numeric(k)
+
+z[1] <- lambda*means[1] + (1-lambda)*mu0
+
+for (i in 2:k)
+{
+  z[i] <- lambda*means[i] + (1-lambda)*z[i-1]
+}
+```
+
+The points that will appear in the EWMA control chart are the following:
+
+```{r}
+names(z) <- paste('Subgroup', 1:k)
+print(z)
+```
+
+Let $i=1,\ldots,k$ (where $k=50$ subgroups in this case). The relevant lines of the EWMA chart are:
+
+-- The center line (blue). A flat line:
+
+$$CL = \mu_0 \\\approx 50$$
+
+-- The lower control limit (red). Each point associated with each subgroup $i$ will have a different value for the lower control line:
+
+$$LCL(i) = \mu_0 - 3\frac{\sigma_0}{\sqrt{n}}\sqrt{\frac{\lambda}{2-\lambda}\left[1-(1-\lambda)^{2i}\right]} \\\approx 50 - 3 \frac{1}{\sqrt{10}}\sqrt{\frac{0.15}{2-0.15}\left[1-(1-0.15)^{2i}\right]}$$
+
+-- The upper control limit (red). Each point associated with each subgroup $i$ will have a different value for the upper control line:
+
+$$UCL(i) = \mu_0 + 3\frac{\sigma_0}{\sqrt{n}}\sqrt{\frac{\lambda}{2-\lambda}\left[1-(1-\lambda)^{2i}\right]} \\\approx 50 + 3 \frac{1}{\sqrt{10}}\sqrt{\frac{0.15}{2-0.15}\left[1-(1-0.15)^{2i}\right]}$$
+
+The lower control limits of the EWMA chart for each rational subgroup are the following:
+
+```{r}
+i <- 1:k
+lcl_ewma <- mu0 - 3 * (sigma0/sqrt(n)) * sqrt((lambda/(2-lambda))*(1-(1-lambda)^(2*i)))
+names(lcl_ewma) <- paste('Subgroup', 1:k)
+print(lcl_ewma)
+```
+
+The upper control limits of the EWMA chart for each rational subgroup are the following:
+
+```{r}
+i <- 1:k
+ucl_ewma <- mu0 + 3 * (sigma0/sqrt(n)) * sqrt((lambda/(2-lambda))*(1-(1-lambda)^(2*i)))
+names(ucl_ewma) <- paste('Subgroup', 1:k)
+print(ucl_ewma)
+```
+
+With all the information above, we plot the EWMA chart.
+
+```{r}
+plot(i, z, type='o', main=paste0('EWMA chart (lambda = ', lambda, ')'), xlab='Rational subgroup', ylab='z', ylim=range(c(z, lcl_ewma, ucl_ewma)))
+abline(h=mu0, col='blue')
+segments(x0=i-0.5, y0=lcl_ewma, x1=i+0.5, y1=lcl_ewma, col='red')
+segments(x0=i[-k]+0.5, y0=lcl_ewma[-k], x1=i[-k]+0.5, y1=lcl_ewma[-1], col='red')
+segments(x0=i-0.5, y0=ucl_ewma, x1=i+0.5, y1=ucl_ewma, col='red')
+segments(x0=i[-k]+0.5, y0=ucl_ewma[-k], x1=i[-k]+0.5, y1=ucl_ewma[-1], col='red')
+```
+
+&nbsp;
+
+### **Conclusion**
+
+In both the MA and the EWMA charts, the trend of the plotted points is increasing throughout the subgroups, which suggests that the conditions of the process may be changing over time. For the first subgroups, there is no problem and we could say that the process is under control. However, there comes a time when the points escape the control zone and stay out for the following data. This means that the process gets out of control. In the case of the MA chart, the first subgroup out of the control zone is number 48, whereas in the case of the EWMA chart, the first subgroup out of the control zone is number 45. The specific time at which a process goes out of control depends on the choice of $w$ in the MA chart and the choice of $\lambda$ in the EWMA chart. Here, we have used $w=10$ and $\lambda=0.15$, but other values could be used depending on business needs. In any case, both methods have worked well to systematically detect a problem that becomes significant in the last few measurements.

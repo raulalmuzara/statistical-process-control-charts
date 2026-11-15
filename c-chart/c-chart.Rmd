@@ -1,0 +1,102 @@
+---
+title: "c-chart for statistical process control"
+author: "Raul Almuzara"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+&nbsp;
+
+### **Introduction**
+
+We will work with a dataset which simulates the data that could have been collected from one variable of an industrial process. In this case, we have a list of the number of defects detected in each manufactured product, with each product representing the same inspection unit and produced by a stable process. We will obtain a c-chart using the appropriate statistical techniques. Then, we will judge if the industrial process is under control or if there could be a problem.
+
+&nbsp;
+
+### **Analysis**
+
+We will use the file *datacc3.txt*.
+
+```{r}
+data3 <- read.delim('datacc3.txt', header = FALSE)
+colnames(data3) <- c('Value')
+data3
+```
+
+There are $k=50$ measurements.
+
+```{r}
+k <- 50
+```
+
+Here is a histogram with all measurements.
+
+```{r}
+hist(data3$Value, main = 'Histogram', xlab = 'Value', ylab = 'Frequency')
+```
+
+If the data were to follow a Poisson distribution, the mean and variance should be fairly similar.
+
+```{r}
+cbar <- mean(data3$Value)
+cbar
+```
+
+```{r}
+var(data3$Value)
+```
+
+We carry out a goodness-of-fit test for the Poisson distribution. The null hypothesis cannot be rejected and the data could be compatible with a Poisson distribution.
+
+```{r}
+library(vcd)
+gof <- goodfit(data3$Value, type='poisson')
+summary(gof)
+```
+
+For the c-chart, we can treat each measurement as its own rational subgroup.
+
+```{r}
+defects <- data3$Value
+```
+
+The points in the c-chart are directly the number of defects found in each measurement.
+
+```{r}
+names(defects) <- paste('Subgroup', 1:k)
+print(defects)
+```
+
+For the c-chart, the relevant lines are:
+
+-- The center line (blue):
+
+$$CL = \overline{c} \\\approx 8.2400$$
+
+-- The lower control limit (red) (in this case, it is negative, so it is not of much interest and we will just plot a line at 0):
+
+$$LCL = \overline{c} - 3\sqrt{\overline{c}} \\\approx 8.2400 - 3\sqrt{8.2400} \\\approx -0.3716 \\<0$$
+
+-- The upper control limit (red):
+
+$$UCL = \overline{c} + 3\sqrt{\overline{c}} \\\approx 8.2400 + 3\sqrt{8.2400} \\\approx 16.8516$$
+
+With all the information above, we plot the c-chart.
+
+```{r}
+plot(1:k, defects, type='o', main = 'c-chart', xlab = 'Measurement number', ylab = 'Number of defects', ylim = c(0, max(defects)+1))
+abline(h=cbar, col='blue')
+abline(h=max(0, cbar-3*sqrt(cbar)), col='red')
+abline(h=cbar+3*sqrt(cbar), col='red')
+```
+
+&nbsp;
+
+### **Conclusion**
+
+Based on the c-chart, we see that all the numbers of nonconformities found in the measurements are located within the band created by the control limits. Therefore, this process could be considered under control.
